@@ -1,4 +1,3 @@
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
@@ -31,6 +30,9 @@ int procfile_write(struct file *file, const char *buffer, unsigned long count, v
 #define PROCFS_NAME "gotchi"
 #define INTERVAL 1000
 #define WQ_NAME "TamagotchiWQ.c"
+
+#define HUNGER_BEFORE_DIE = 60
+#define BOREDOM_BEFORE_DIE = 180
 
 /*
  *	Global vars
@@ -117,8 +119,10 @@ static int device_open(struct inode *inode, struct file *file){
 	if(Device_Open)
 		return -EBUSY;
 	Device_Open++;
-	//TODO: insert my output handler there.
-	sprintf(msg, "I already told you %d times Hello world!\n", counter++);
+	if(!die){
+		sprintf(msg, "%s Hungry, %s\d", 
+			getLevelMessage(Hunger, HUNGER_BEFORE_DIE), getLevelMessage(Boredom, BOREDOM_BEFORE_DIE) );	
+	}
 	msg_Ptr = msg;
 	try_module_get(THIS_MODULE);
 	return 0;
@@ -163,7 +167,17 @@ int procfile_write(struct file *file, const char *buffer, unsigned long count, v
 	if ( copy_from_user(procfs_buffer, buffer, procfs_buffer_size) ) {
 		return -EFAULT;
 	}
-	//TODO: Insert my command handler there
+	switch(procfs_buffer[0]){
+		case 'F':
+			Hunger = 0;
+			break;
+		case 'P':
+			Boredom = 0;
+			break;
+		case 'H':
+			sprintf(KERN_ALERT "Please cat Letter > /proc/%s F: feed, P: play, H: this help\n", PROCFS_NAME);
+			break;
+	}
 	return procfs_buffer_size;
 }
 
@@ -172,9 +186,32 @@ int procfile_write(struct file *file, const char *buffer, unsigned long count, v
  */
 static void intrpt_routine(void *irrelevant){
 	Hunger++;
+	if(Hunger == HUNGER_BEFORE_DIE * 9 / 10){
+		printk(KERN_ALERT "Your tamagotchi is about to die. Please cat F > /dev/%s\n", PROCFS_NAME);
+	} else if (Hunger >= HUNGER_BEFORE_DIE) {
+		
+	}
+	
 	Boredom++;
 	if (die == 0)
 		queue_delayed_work(workqueue, &Task, INTERVAL);
+}
+
+void die(void){
+	die = 1;
+	sprintf(msg, "DEAD :(");
+}
+
+char *getLevelMessage(int level, int max){
+	if(level < max / 5){
+		return "not";
+	} else if (level < max / 3){
+		return "slightly";
+	} else if (level < max * 2 / 3){
+		return "seriously";
+	} else {
+		return "very";
+	}
 }
 
 MODULE_LICENSE("GPL");
